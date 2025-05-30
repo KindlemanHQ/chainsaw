@@ -39,6 +39,10 @@ class Chainsaw {
         // require_once CHAINSAW_DIR . 'includes/settings-fields.php';
 
          add_action('admin_init', array($this, 'handle_cache_clearing'));
+
+        add_action('init', array($this, 'maybe_cleanup_debug_log'), 9999);
+
+         add_action('admin_notices', array($this, 'admin_notices'));
     }
     
     /**
@@ -546,8 +550,10 @@ public function debug_log_section_callback() {
 /**
  * Display the debug.log contents
  */
+/**
+ * Display the debug.log contents with file size info
+ */
 private function display_debug_log() {
-
     $log_file = WP_CONTENT_DIR . '/debug.log';
     
     if (!file_exists($log_file)) {
@@ -563,10 +569,35 @@ private function display_debug_log() {
         echo '</p></div>';
         return;
     }
+
+    // Get file size information
+    $file_size = filesize($log_file);
+    $file_size_human = size_format($file_size);
+    $max_size = $this->get_current_max_size();
+    $max_size_human = size_format($max_size);
+    
+    // Show file size info
+    echo '<div class="debug-log-info">';
+    printf(
+        __('Current size: %1$s | Max size: %2$s', 'chainsaw-plugin'),
+        '<strong>' . esc_html($file_size_human) . '</strong>',
+        '<strong>' . esc_html($max_size_human) . '</strong>'
+    );
+    
+    // Show warning if approaching limit
+    if ($file_size > ($max_size * 0.9)) {
+        $percent = round(($file_size / $max_size) * 100);
+        echo '<div class="notice notice-warning inline"><p>';
+        printf(
+            __('Warning: debug.log is %s%% of maximum size!', 'chainsaw-plugin'),
+            $percent
+        );
+        echo '</p></div>';
+    }
+    echo '</div>';
     
     // Get last 100 lines
     $lines = $this->tail_file($log_file, 100);
-    // var_dump($lines);
     
     if (empty($lines)) {
         echo '<div class="notice notice-success inline"><p>';
@@ -576,6 +607,16 @@ private function display_debug_log() {
     }
     
     echo '<pre>' . esc_html(implode("\n", $lines)) . '</pre>';
+}
+
+/**
+ * Get current max size setting in bytes
+ */
+private function get_current_max_size() {
+    $options = get_option('chainsaw_options');
+    return isset($options['debug_log_max_size']) 
+        ? $this->convert_size_to_bytes($options['debug_log_max_size'])
+        : 1073741824; // Default 1GB
 }
 
 /**
@@ -629,6 +670,115 @@ private function tail_file($filepath, $lines = 100) {
     fclose($f);
     return explode("\n", $output);
 }
+
+/**
+     * Auto-cleanup debug.log when it gets too large
+     */
+    public function maybe_cleanup_debug_log() {
+    // Only run ~1% of page loads
+     if (rand(30, 100) > 1) return;
+
+    $debug_log = WP_CONTENT_DIR . '/debug.log';
+    $max_size = $this->get_current_max_size();
+
+    if (!file_exists($debug_log)) return;
+
+    $filesize = filesize($debug_log);
+    if ($filesize <= $max_size) return;
+
+    // Get last 100 lines
+    $tail = $this->get_last_log_lines($debug_log, 100);
+
+    // Store cleanup info before deleting
+    $cleanup_info = array(
+        'time' => current_time('mysql'),
+        'size' => $filesize,
+        'last_lines' => $tail
+    );
+    update_option('chainsaw_last_cleanup', $cleanup_info);
+
+    // Delete the file
+    unlink($debug_log);
+
+    // Send email notification
+    $this->send_log_cleanup_notification($filesize, $tail);
+}
+
+/**
+ * Show admin notice when log was recently cleared
+ */
+public function admin_notices() {
+    $cleanup_info = get_option('chainsaw_last_cleanup');
+    if (!$cleanup_info || (time() - strtotime($cleanup_info['time']) > 3600)) {
+        return;
+    }
+    
+    $size = size_format($cleanup_info['size']);
+    ?>
+    <div class="notice notice-warning is-dismissible">
+        <p>
+            <?php printf(
+                __('Chainsaw: debug.log was automatically cleared at %1$s. The file had reached %2$s in size.', 'chainsaw-plugin'),
+                date_i18n(get_option('date_format') . ' ' . get_option('time_format'), strtotime($cleanup_info['time'])),
+                $size
+            ); ?>
+        </p>
+        <details style="margin-top:10px;">
+            <summary><?php _e('Show last 10 lines', 'chainsaw-plugin'); ?></summary>
+            <pre style="background:#f6f7f7;padding:10px;overflow:auto;"><?php 
+                echo esc_html(implode("\n", array_slice(explode("\n", $cleanup_info['last_lines']), -10)));
+            ?></pre>
+        </details>
+    </div>
+    <?php
+    // Clear the transient after displaying
+    delete_option('chainsaw_last_cleanup');
+}
+
+    /**
+     * Get last N lines from log file efficiently
+     */
+    private function get_last_log_lines($filepath, $lines = 100) {
+        $handle = fopen($filepath, 'rb');
+        if (!$handle) return '';
+        
+        fseek($handle, max(0, filesize($filepath) - 20000)); // Jump ~20KB from end
+        $content = stream_get_contents($handle);
+        fclose($handle);
+        
+        $all_lines = explode("\n", $content);
+        return implode("\n", array_slice($all_lines, -$lines));
+    }
+
+    /**
+     * Send email notification about log cleanup
+     */
+    private function send_log_cleanup_notification($filesize, $last_lines) {
+        $email = isset($this->options['developer_email']) 
+            ? $this->options['developer_email']
+            : get_option('admin_email');
+        
+        wp_mail(
+            $email,
+            '🚨 debug.log DELETED on ' . site_url(),
+            "File exceeded maximum size (" . size_format($filesize) . ") and was auto-removed.\n\n" .
+            "Last 100 lines:\n====================\n" . $last_lines . "\n====================\n" .
+            "Action taken: " . date('Y-m-d H:i:s') . "\n" .
+            "Next: Fix logging issues or disable WP_DEBUG_LOG."
+        );
+    }
+
+    /**
+     * Convert human-readable size to bytes
+     */
+    private function convert_size_to_bytes($size_str) {
+        switch ($size_str) {
+            case '1kb': return 1024;
+            case '1mb': return 1048576;
+            case '1gb': return 1073741824;
+            default: return 1073741824; // Default 1GB
+        }
+    }
 
 }
 
