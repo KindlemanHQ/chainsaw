@@ -530,13 +530,9 @@ public function debug_log_section_callback() {
     // and make it a standalone display function
     ?>
     <h2><?php _e('Debug Log Latest 100 Lines', 'chainsaw-plugin'); ?></h2>    
-    <div class="debug-log-viewer">
-        
-        <div class="debug-log-content">
+    
             <?php $this->display_debug_log(); ?>
-        </div>
-        
-    </div>
+    
     <p>
             <a href="<?php echo esc_url(add_query_arg('refreshdebuglog', '1')); ?>" 
                class="button button-secondary">
@@ -577,14 +573,11 @@ private function display_debug_log() {
     $max_size_human = size_format($max_size);
     
     // Show file size info
-    echo '<div class="debug-log-info">';
     printf(
         __('Current size: %1$s | Max size: %2$s', 'chainsaw-plugin'),
         '<strong>' . esc_html($file_size_human) . '</strong>',
         '<strong>' . esc_html($max_size_human) . '</strong>'
     );
-    
-    // Show warning if approaching limit
     if ($file_size > ($max_size * 0.9)) {
         $percent = round(($file_size / $max_size) * 100);
         echo '<div class="notice notice-warning inline"><p>';
@@ -594,8 +587,15 @@ private function display_debug_log() {
         );
         echo '</p></div>';
     }
-    echo '</div>';
+    echo '<div class="debug-log-info">';
     
+    
+    // Show warning if approaching limit
+    
+    echo '</div>';
+    ?><div class="debug-log-viewer">        
+        <div class="debug-log-content">
+    <?php
     // Get last 100 lines
     $lines = $this->tail_file($log_file, 100);
     
@@ -607,6 +607,9 @@ private function display_debug_log() {
     }
     
     echo '<pre>' . esc_html(implode("\n", $lines)) . '</pre>';
+    ?>
+    </div></div>
+    <?php
 }
 
 /**
@@ -675,8 +678,8 @@ private function tail_file($filepath, $lines = 100) {
      * Auto-cleanup debug.log when it gets too large
      */
     public function maybe_cleanup_debug_log() {
-    // Only run ~1% of page loads
-     if (rand(30, 100) > 1) return;
+    
+    if (rand(1, 10) > 1) return;
 
     $debug_log = WP_CONTENT_DIR . '/debug.log';
     $max_size = $this->get_current_max_size();
