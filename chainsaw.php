@@ -129,6 +129,8 @@ class Chainsaw {
         'chainsaw-settings',
         'chainsaw_developer_section'
     );
+
+    
 }
 
 /**
@@ -348,7 +350,7 @@ public function debug_info_field_callback() {
             <tr>
                 <td><code>WP_DEBUG</code></td>
                 <td><strong><?php echo $debug_settings['WP_DEBUG'] ? __('true', 'chainsaw-plugin') : __('false', 'chainsaw-plugin'); ?></strong></td>
-                <td><?php _e('false on production', 'chainsaw-plugin'); ?></td>
+                <td><?php _e('false on production unless you need output to debug.log', 'chainsaw-plugin'); ?></td>
             </tr>
             <tr>
                 <td><code>WP_DEBUG_DISPLAY</code></td>
@@ -363,7 +365,7 @@ public function debug_info_field_callback() {
             <tr>
                 <td><code>CORE_UPGRADE_SKIP_NEW_BUNDLED</code></td>
                 <td><strong><?php echo $debug_settings['CORE_UPGRADE_SKIP_NEW_BUNDLED'] ? __('true', 'chainsaw-plugin') : __('false', 'chainsaw-plugin'); ?></strong></td>
-                <td><?php _e('true to skip bundled items during update', 'chainsaw-plugin'); ?></td>
+                <td><?php _e('true to skip adding yearly wp themes during update', 'chainsaw-plugin'); ?></td>
             </tr>
         </tbody>
     </table>
@@ -398,23 +400,26 @@ public function debug_info_field_callback() {
     /**
      * Render settings page
      */
-    public function render_settings_page() {
-        if (!current_user_can('manage_options')) {
-            return;
-        }
-        ?>
-        <div class="wrap">
-            <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
-            <form action="options.php" method="post">
-                <?php
-                settings_fields('chainsaw_settings');
-                do_settings_sections('chainsaw-settings');
-                submit_button('Save Settings');
-                ?>
-            </form>
-        </div>
-        <?php
+  public function render_settings_page() {
+    if (!current_user_can('manage_options')) {
+        return;
     }
+    ?>
+    <div class="wrap">
+        <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
+        
+        <form action="options.php" method="post">
+            <?php
+            settings_fields('chainsaw_settings');
+            do_settings_sections('chainsaw-settings');
+            submit_button('Save Settings');
+            ?>
+        </form>
+        
+        <?php $this->debug_log_section_callback(); ?>
+    </div>
+    <?php
+}
     
     /**
      * Enqueue admin assets
@@ -508,6 +513,122 @@ public function debug_info_field_callback() {
       </p>
       <?php
   }
+
+
+  /**
+ * Debug Log Section callback
+ */
+/**
+ * Debug Log Section callback
+ */
+public function debug_log_section_callback() {
+    // Remove from settings sections registration
+    // and make it a standalone display function
+    ?>
+    <h2><?php _e('Debug Log Latest 100 Lines', 'chainsaw-plugin'); ?></h2>    
+    <div class="debug-log-viewer">
+        
+        <div class="debug-log-content">
+            <?php $this->display_debug_log(); ?>
+        </div>
+        
+    </div>
+    <p>
+            <a href="<?php echo esc_url(add_query_arg('refreshdebuglog', '1')); ?>" 
+               class="button button-secondary">
+                <?php _e('Refresh Log', 'chainsaw-plugin'); ?>
+            </a>
+            <span class="spinner" style="float: none; display: none;"></span>
+        </p>
+    <?php
+}
+
+/**
+ * Display the debug.log contents
+ */
+private function display_debug_log() {
+
+    $log_file = WP_CONTENT_DIR . '/debug.log';
+    
+    if (!file_exists($log_file)) {
+        echo '<div class="notice notice-warning inline"><p>';
+        _e('debug.log file not found.', 'chainsaw-plugin');
+        echo '</p></div>';
+        return;
+    }
+    
+    if (!is_readable($log_file)) {
+        echo '<div class="notice notice-error inline"><p>';
+        _e('debug.log file is not readable.', 'chainsaw-plugin');
+        echo '</p></div>';
+        return;
+    }
+    
+    // Get last 100 lines
+    $lines = $this->tail_file($log_file, 100);
+    // var_dump($lines);
+    
+    if (empty($lines)) {
+        echo '<div class="notice notice-success inline"><p>';
+        _e('debug.log is empty.', 'chainsaw-plugin');
+        echo '</p></div>';
+        return;
+    }
+    
+    echo '<pre>' . esc_html(implode("\n", $lines)) . '</pre>';
+}
+
+/**
+ * Get last N lines of a file
+ */
+private function tail_file($filepath, $lines = 100) {
+    // Open file
+    $f = @fopen($filepath, 'rb');
+    if ($f === false) return false;
+
+    // Sets buffer size
+    $buffer = 256;
+    
+    // Jump to last character
+    fseek($f, -1, SEEK_END);
+    
+    // Read it and adjust line number if necessary
+    // (Otherwise the result would be wrong if file doesn't end with a blank line)
+    if (fread($f, 1) != "\n") $lines -= 1;
+    
+    // Start reading
+    $output = '';
+    $chunk = '';
+    
+    // While we would like more
+    while (ftell($f) > 0 && $lines >= 0) {
+        // Figure out how far back we should jump
+        $seek = min(ftell($f), $buffer);
+        
+        // Do the jump (backwards, relative to where we are)
+        fseek($f, -$seek, SEEK_CUR);
+        
+        // Read a chunk and prepend it to our output
+        $output = ($chunk = fread($f, $seek)) . $output;
+        
+        // Jump back to where we started reading
+        fseek($f, -mb_strlen($chunk, '8bit'), SEEK_CUR);
+        
+        // Decrease our line counter
+        $lines -= substr_count($chunk, "\n");
+    }
+    
+    // While we have too many lines
+    // (Because of buffer size we might have read too many)
+    while ($lines++ < 0) {
+        // Find first newline and remove all text before that
+        $output = substr($output, strpos($output, "\n") + 1);
+    }
+    
+    // Close file and return
+    fclose($f);
+    return explode("\n", $output);
+}
 
 }
 

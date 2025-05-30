@@ -13,3 +13,20 @@
     border-left: 4px solid #46b450;
     margin: 5px 0 15px;
 }
+
+.debug-log-viewer {
+    margin-top: 30px;
+    padding: 1em;    
+    background-color: #222;
+    color: green;
+    font-family: monospace;
+    border-radius: 4px;
+    overflow-x: scroll;
+    overflow-y: scroll;
+    height: 400px;
+}
+
+.debug-log-viewer h2 {
+    font-size: 1.3em;
+    margin: 1em 0 0.5em;
+}
