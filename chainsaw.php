@@ -86,9 +86,7 @@ class Chainsaw {
             array($this, 'api_key_field_callback'),
             'chainsaw-settings',
             'chainsaw_api_section'
-        );
-
-       
+        );       
     }
     
     /**
