@@ -59,35 +59,57 @@ class Chainsaw {
      * Setup settings sections and fields
      */
     private function setup_settings_sections() {
-        // Add API Settings section
-        
+    // Add Debug Settings section
+    add_settings_section(
+        'chainsaw_debug_section',
+        __('Debug Configuration', 'chainsaw-plugin'),
+        array($this, 'debug_section_callback'),
+        'chainsaw-settings'
+    );
 
-        // Add API Key field
-        
+    // Add debug.log size field
+    add_settings_field(
+        'debug_log_max_size',
+        __('Max debug.log Size', 'chainsaw-plugin'),
+        array($this, 'debug_log_size_callback'),
+        'chainsaw-settings',
+        'chainsaw_debug_section'
+    );
 
-        // Add Debug Settings section
-        add_settings_section(
-            'chainsaw_debug_section',
-            __('Debug Configuration', 'chainsaw-plugin'),
-            array($this, 'debug_section_callback'),
-            'chainsaw-settings'
-        );
+    // Add API Settings section
+    add_settings_section(
+        'chainsaw_api_section',
+        __('API Settings', 'chainsaw-plugin'),
+        array($this, 'api_section_callback'),
+        'chainsaw-settings'
+    );
 
-        add_settings_section(
-            'chainsaw_api_section',
-            __('API Settings', 'chainsaw-plugin'),
-            array($this, 'api_section_callback'),
-            'chainsaw-settings'
-        );
+    // Add API Key field
+    add_settings_field(
+        'chainsaw_api_key',
+        __('API Key', 'chainsaw-plugin'),
+        array($this, 'api_key_field_callback'),
+        'chainsaw-settings',
+        'chainsaw_api_section'
+    );
 
-        add_settings_field(
-            'chainsaw_api_key',
-            __('API Key', 'chainsaw-plugin'),
-            array($this, 'api_key_field_callback'),
-            'chainsaw-settings',
-            'chainsaw_api_section'
-        );       
-    }
+    // Add Developer Settings section
+    add_settings_section(
+        'chainsaw_developer_section',
+        __('Developer Settings', 'chainsaw-plugin'),
+        array($this, 'developer_section_callback'),
+        'chainsaw-settings'
+    );
+
+    // Add Developer Email field
+    add_settings_field(
+        'developer_email',
+        __('Developer Email', 'chainsaw-plugin'),
+        array($this, 'developer_email_callback'),
+        'chainsaw-settings',
+        'chainsaw_developer_section'
+    );
+}
     
     /**
      * API Section callback
@@ -240,14 +262,71 @@ public function debug_info_field_callback() {
      * Sanitize settings
      */
     public function sanitize_settings($input) {
-        $sanitized = array();
-        
-        if (isset($input['api_key'])) {
-            $sanitized['api_key'] = sanitize_text_field(trim($input['api_key']));
-        }
-        
-        return $sanitized;
+      $sanitized = array();
+      
+      // Sanitize API key
+      if (isset($input['api_key'])) {
+          $sanitized['api_key'] = sanitize_text_field(trim($input['api_key']));
+      }
+      
+      // Sanitize debug log size
+      if (isset($input['debug_log_max_size'])) {
+          $allowed_sizes = array('1kb', '1mb', '1gb');
+          $sanitized['debug_log_max_size'] = in_array($input['debug_log_max_size'], $allowed_sizes) 
+              ? $input['debug_log_max_size'] 
+              : '1mb';
+      }
+      
+      // Sanitize developer email
+      if (isset($input['developer_email'])) {
+          $sanitized['developer_email'] = sanitize_email(trim($input['developer_email']));
+      }
+      
+      return $sanitized;
+  }
+
+    /**
+     * Debug Log Size field callback
+     */
+    public function debug_log_size_callback() {
+        $options = get_option('chainsaw_options');
+        $current_size = isset($options['debug_log_max_size']) ? $options['debug_log_max_size'] : '1mb';
+        ?>
+        <select id="debug_log_max_size" name="chainsaw_options[debug_log_max_size]" class="regular-text">
+            <option value="1kb" <?php selected($current_size, '1kb'); ?>><?php _e('1 KB', 'chainsaw-plugin'); ?></option>
+            <option value="1mb" <?php selected($current_size, '1mb'); ?>><?php _e('1 MB', 'chainsaw-plugin'); ?></option>
+            <option value="1gb" <?php selected($current_size, '1gb'); ?>><?php _e('1 GB', 'chainsaw-plugin'); ?></option>
+        </select>
+        <p class="description">
+            <?php _e('Maximum allowed size for debug.log file before rotation.', 'chainsaw-plugin'); ?>
+        </p>
+        <?php
     }
+    /**
+     * Developer Section callback
+     */
+    public function developer_section_callback() {
+        echo '<p>' . __('Configure developer notifications and alerts.', 'chainsaw-plugin') . '</p>';
+    }
+
+    /**
+   * Developer Email field callback
+   */
+  public function developer_email_callback() {
+      $options = get_option('chainsaw_options');
+      $email = isset($options['developer_email']) ? esc_attr($options['developer_email']) : '';
+      ?>
+      <input type="email" 
+            id="developer_email" 
+            name="chainsaw_options[developer_email]" 
+            value="<?php echo $email; ?>" 
+            class="regular-text">
+      <p class="description">
+          <?php _e('Email address for debug notifications and alerts.', 'chainsaw-plugin'); ?>
+      </p>
+      <?php
+  }
+
 }
 
 // Initialize the plugin
