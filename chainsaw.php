@@ -4,8 +4,8 @@
  * Plugin URI: https://kindleman.com.au/chainsaw
  * Description: Wordpress Logging and debug.
  * Version: 1.0.0
- * Author: Will 
- * Author URI: https://willbarker.dev
+ * Author: Kindleman 
+ * Author URI: https://kindleman.com.au
  * License: GPL-2.0+
  * License URI: http://www.gnu.org/licenses/gpl-2.0.txt
  * Text Domain: chainsaw-plugin
