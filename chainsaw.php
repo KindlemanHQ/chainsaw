@@ -38,7 +38,7 @@ class Chainsaw {
         // Include settings fields
         // require_once CHAINSAW_DIR . 'includes/settings-fields.php';
 
-         add_action('admin_init', array($this, 'handle_cache_clearing'));
+        
 
         add_action('init', array($this, 'maybe_cleanup_debug_log'), 9999);
 
@@ -66,22 +66,8 @@ class Chainsaw {
      */
     private function setup_settings_sections() {
     
-      // Add Cache Management section
-    add_settings_section(
-        'chainsaw_cache_section',
-        __('Cache Management', 'chainsaw-plugin'),
-        array($this, 'cache_section_callback'),
-        'chainsaw-settings'
-    );
+   
 
-    // Add Clear Caches field
-    add_settings_field(
-        'clear_caches',
-        __('Clear Caches', 'chainsaw-plugin'),
-        array($this, 'clear_caches_callback'),
-        'chainsaw-settings',
-        'chainsaw_cache_section'
-    );
 
     // Add Debug Settings section
     add_settings_section(
@@ -137,167 +123,7 @@ class Chainsaw {
     
 }
 
-/**
- * Cache Section callback
- */
-public function cache_section_callback() {
-    echo '<p>' . __('Clear various caches with one click.', 'chainsaw-plugin') . '</p>';
-}
 
-/**
- * Clear Caches button callback
- */
-public function clear_caches_callback() {
-    // Get current URL without any cache-clearing parameters
-    $base_url = remove_query_arg(array(
-        'cleartimber',
-        'cleartransients',
-        'clearobjectcache',
-        'clearwoocache',
-        'clearwprocket',
-        'clearbrowsercache'
-    ));
-    ?>
-    <div class="clear-caches-wrapper">
-        <?php if (class_exists('Timber')): ?>
-        <p>
-            <a href="<?php echo esc_url(add_query_arg('cleartimber', '1', $base_url)); ?>" 
-               class="button button-secondary">
-                <?php _e('Clear Timber Cache', 'chainsaw-plugin'); ?>
-            </a>
-        </p>
-        <?php endif; ?>
-        
-        <p>
-            <a href="<?php echo esc_url(add_query_arg('cleartransients', '1', $base_url)); ?>" 
-               class="button button-secondary">
-                <?php _e('Clear All Transients', 'chainsaw-plugin'); ?>
-            </a>
-        </p>
-        
-        <p>
-            <a href="<?php echo esc_url(add_query_arg('clearobjectcache', '1', $base_url)); ?>" 
-               class="button button-secondary">
-                <?php _e('Clear Object Cache', 'chainsaw-plugin'); ?>
-            </a>
-        </p>
-        
-        <?php if (function_exists('wc_delete_product_transients')): ?>
-        <p>
-            <a href="<?php echo esc_url(add_query_arg('clearwoocache', '1', $base_url)); ?>" 
-               class="button button-secondary">
-                <?php _e('Clear WooCommerce Cache', 'chainsaw-plugin'); ?>
-            </a>
-        </p>
-        <?php endif; ?>
-        
-        <?php if (function_exists('rocket_clean_domain')): ?>
-        <p>
-            <a href="<?php echo esc_url(add_query_arg('clearwprocket', '1', $base_url)); ?>" 
-               class="button button-secondary">
-                <?php _e('Clear WP Rocket Cache', 'chainsaw-plugin'); ?>
-            </a>
-        </p>
-        <?php endif; ?>
-        
-        <?php $this->maybe_show_cache_clear_messages(); ?>
-    </div>
-    <?php
-}
-
-/**
- * Maybe show cache clear status messages
- */
-private function maybe_show_cache_clear_messages() {
-    if (isset($_GET['cleartimber']) && $_GET['cleartimber']) {
-        echo '<div class="notice notice-success inline"><p>';
-        _e('Timber cache cleared.', 'chainsaw-plugin');
-        echo '</p></div>';
-    }
-    
-    if (isset($_GET['cleartransients']) && $_GET['cleartransients']) {
-        echo '<div class="notice notice-success inline"><p>';
-        _e('All transients cleared.', 'chainsaw-plugin');
-        echo '</p></div>';
-    }
-    
-    if (isset($_GET['clearobjectcache']) && $_GET['clearobjectcache']) {
-        echo '<div class="notice notice-success inline"><p>';
-        _e('Object cache flushed.', 'chainsaw-plugin');
-        echo '</p></div>';
-    }
-    
-    if (isset($_GET['clearwoocache']) && $_GET['clearwoocache']) {
-        echo '<div class="notice notice-success inline"><p>';
-        _e('WooCommerce transients cleared.', 'chainsaw-plugin');
-        echo '</p></div>';
-    }
-    
-    if (isset($_GET['clearwprocket']) && $_GET['clearwprocket']) {
-        echo '<div class="notice notice-success inline"><p>';
-        _e('WP Rocket cache cleared.', 'chainsaw-plugin');
-        echo '</p></div>';
-    }
-    
-    if (isset($_GET['clearbrowsercache']) && $_GET['clearbrowsercache']) {
-        echo '<div class="notice notice-success inline"><p>';
-        _e('Browser cache headers reset.', 'chainsaw-plugin');
-        echo '</p></div>';
-    }
-    
-    // Additional cache types can be added here following the same pattern
-}
-
-
-
-/**
- * Handle cache clearing requests
- */
-public function handle_cache_clearing() {
-    // Only process if we're on our settings page
-    if (!isset($_GET['page']) || $_GET['page'] !== 'chainsaw-settings') {
-        return;
-    }
-    
-    // Clear Timber cache if requested
-    if (isset($_GET['cleartimber']) && $_GET['cleartimber'] && class_exists('Timber')) {
-        add_filter('timber/cache/mode', function() { return 'none'; });
-        
-        if (method_exists('Timber\Loader', 'clear_cache_timber')) {
-            $loader = new Timber\Loader();
-            $loader->clear_cache_timber();
-        }
-    }
-    
-    // Clear transients if requested
-    if (isset($_GET['cleartransients']) && $_GET['cleartransients']) {
-        global $wpdb;
-        $wpdb->query("DELETE FROM $wpdb->options WHERE option_name LIKE '_transient_%'");
-        $wpdb->query("DELETE FROM $wpdb->options WHERE option_name LIKE '_site_transient_%'");        
-    }
- 
-
-    // Object Cache
-    if (isset($_GET['clearobjectcache'])) {
-        wp_cache_flush();
-        add_settings_error('chainsaw_messages', 'chainsaw_message', 
-            __('Object cache cleared', 'chainsaw-plugin'), 'success');
-    }
-
-    // WooCommerce
-    if (isset($_GET['clearwoocache']) && function_exists('wc_delete_product_transients')) {
-        wc_delete_product_transients();
-        add_settings_error('chainsaw_messages', 'chainsaw_message', 
-            __('WooCommerce transients cleared', 'chainsaw-plugin'), 'success');
-    }
-
-    // WP Rocket
-    if (isset($_GET['clearwprocket']) && function_exists('rocket_clean_domain')) {
-        rocket_clean_domain();
-        add_settings_error('chainsaw_messages', 'chainsaw_message', 
-            __('WP Rocket cache cleared', 'chainsaw-plugin'), 'success');
-    }
-}
     
     /**
      * API Section callback
