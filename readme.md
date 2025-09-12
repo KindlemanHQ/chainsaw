@@ -1,3 +1,3 @@
 # Chainsaw
 
-A simple plugin for hacking at caches.  
+A simple plugin for managing your Wordpres debug.log  
