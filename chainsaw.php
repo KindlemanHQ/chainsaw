@@ -87,12 +87,12 @@ class Chainsaw {
     );
 
     // Add API Settings section
-    add_settings_section(
-        'chainsaw_api_section',
-        __('API Settings', 'chainsaw-plugin'),
-        array($this, 'api_section_callback'),
-        'chainsaw-settings'
-    );
+    // add_settings_section(
+    //     'chainsaw_api_section',
+    //     __('API Settings', 'chainsaw-plugin'),
+    //     array($this, 'api_section_callback'),
+    //     'chainsaw-settings'
+    // );
 
     // Add API Key field
     add_settings_field(
