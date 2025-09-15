@@ -36,15 +36,11 @@ class Chainsaw {
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_assets'));
         
         // Include settings fields
-        // require_once CHAINSAW_DIR . 'includes/settings-fields.php';
-
-        
+        // require_once CHAINSAW_DIR . 'includes/settings-fields.php';        
 
         add_action('init', array($this, 'maybe_cleanup_debug_log'), 9999);
 
          add_action('admin_notices', array($this, 'admin_notices'));
-
-        // Handle WP_DEBUG_LOG toggle submissions
         add_action('admin_post_chainsaw_toggle_wp_debug_log', array($this, 'handle_toggle_wp_debug_log'));
     }
     
@@ -68,119 +64,71 @@ class Chainsaw {
      * Setup settings sections and fields
      */
     private function setup_settings_sections() {
-    
-   
+        // Add API Settings section
+        // add_settings_section(
+        //     'chainsaw_api_section',
+        //     __('API Settings', 'chainsaw-plugin'),
+        //     array($this, 'api_section_callback'),
+        //     'chainsaw-settings'
+        // );
 
+        // Add API Key field
+        // add_settings_field(
+        //     'chainsaw_api_key',
+        //     __('API Key', 'chainsaw-plugin'),
+        //     array($this, 'api_key_field_callback'),
+        //     'chainsaw-settings',
+        //     'chainsaw_api_section'
+        // );
 
-    // Add Debug Settings section
-    add_settings_section(
-        'chainsaw_debug_section',
-        __('Debug Configuration', 'chainsaw-plugin'),
-        array($this, 'debug_section_callback'),
-        'chainsaw-settings'
-    );
+        // Add Developer Settings section
+        add_settings_section(
+            'chainsaw_developer_section',
+            __('Developer Settings', 'chainsaw-plugin'),
+            array($this, 'developer_section_callback'),
+            'chainsaw-settings'
+        );
 
-    // Add debug.log size field
-    add_settings_field(
-        'debug_log_max_size',
-        __('Max debug.log Size', 'chainsaw-plugin'),
-        array($this, 'debug_log_size_callback'),
-        'chainsaw-settings',
-        'chainsaw_debug_section'
-    );
+         // Add debug.log size field
+        add_settings_field(
+            'debug_log_max_size',
+            __('Max debug.log Size', 'chainsaw-plugin'),
+            array($this, 'debug_log_size_callback'),
+            'chainsaw-settings',
+            'chainsaw_developer_section'
+        );
 
-    // Add API Settings section
-    // add_settings_section(
-    //     'chainsaw_api_section',
-    //     __('API Settings', 'chainsaw-plugin'),
-    //     array($this, 'api_section_callback'),
-    //     'chainsaw-settings'
-    // );
-
-    // // Add API Key field
-    // add_settings_field(
-    //     'chainsaw_api_key',
-    //     __('API Key', 'chainsaw-plugin'),
-    //     array($this, 'api_key_field_callback'),
-    //     'chainsaw-settings',
-    //     'chainsaw_api_section'
-    // );
-
-    // Add Developer Settings section
-    add_settings_section(
-        'chainsaw_developer_section',
-        __('Developer Settings', 'chainsaw-plugin'),
-        array($this, 'developer_section_callback'),
-        'chainsaw-settings'
-    );
-
-    // Add Developer Email field
-    add_settings_field(
-        'developer_email',
-        __('Developer Email', 'chainsaw-plugin'),
-        array($this, 'developer_email_callback'),
-        'chainsaw-settings',
-        'chainsaw_developer_section'
-    );
-
-    
-}
-
-
-    
-    /**
-     * API Section callback
-     */
-    public function api_section_callback() {
-        echo '<p>' . __('Configure your API connection settings.', 'chainsaw-plugin') . '</p>';
-    }
-    
-    /**
-     * API Key field callback
-     */
-    public function api_key_field_callback() {
-        $options = get_option('chainsaw_options');
-        $api_key = isset($options['api_key']) ? esc_attr($options['api_key']) : '';
-        ?>
-        <input type="text" 
-               id="chainsaw_api_key" 
-               name="chainsaw_options[api_key]" 
-               value="<?php echo $api_key; ?>" 
-               class="regular-text">
-        <p class="description">
-            <?php _e('Enter your API key.', 'chainsaw-plugin'); ?>
-        </p>
-        <?php
+        // Add Developer Email field
+        add_settings_field(
+            'developer_email',
+            __('Developer Email', 'chainsaw-plugin'),
+            array($this, 'developer_email_callback'),
+            'chainsaw-settings',
+            'chainsaw_developer_section'
+        );    
     }
 
 
-    public function debug_section_callback() {
     
-    // debug_info_field_callback now shown at top of settings page
-    }
+    // /**
+    //  * API Section callback
+    //  */
+    // public function api_section_callback() {
+    //     echo '<p>' . __('Configure your API connection settings.', 'chainsaw-plugin') . '</p>';
+    // }
 
-    /**
- * Debug Info field callback
- */
-public function debug_info_field_callback() {
-    $debug_settings = array(
+
+
+    public function debug_section() {
+      echo '<p>' . __('These WordPress debug settings affect how errors and logs are handled.', 'chainsaw-plugin') . '</p>';
+      echo '<p>' . __('Recommended production settings: WP_DEBUG=false, WP_DEBUG_DISPLAY=false, WP_DEBUG_LOG=false', 'chainsaw-plugin') . '</p>';
+      $debug_settings = array(
         'WP_DEBUG' => defined('WP_DEBUG') ? WP_DEBUG : false,
         'WP_DEBUG_DISPLAY' => defined('WP_DEBUG_DISPLAY') ? WP_DEBUG_DISPLAY : false,
         'WP_DEBUG_LOG' => defined('WP_DEBUG_LOG') ? WP_DEBUG_LOG : false,
         'CORE_UPGRADE_SKIP_NEW_BUNDLED' => defined('CORE_UPGRADE_SKIP_NEW_BUNDLED') ? CORE_UPGRADE_SKIP_NEW_BUNDLED : false,
     );
     ?>
-    <h2 style="margin-top:0;"><?php _e('Debug Configuration', 'chainsaw-plugin'); ?></h2>
-    <div class="chainsaw-debug-info-desc" style="margin-bottom:10px;">
-        <p><?php _e('These settings are defined in your wp-config.php file. To change them:', 'chainsaw-plugin'); ?></p>
-        <ol>
-            <li><?php _e('Edit wp-config.php (usually in your WordPress root directory)', 'chainsaw-plugin'); ?></li>
-            <li><?php _e('Look for the debug settings (search for "WP_DEBUG")', 'chainsaw-plugin'); ?></li>
-            <li><?php _e('Modify the values and save the file', 'chainsaw-plugin'); ?></li>
-            <li><?php _e('Refresh this page to see the updated values', 'chainsaw-plugin'); ?></li>
-        </ol>
-        <p><strong><?php _e('Important:', 'chainsaw-plugin'); ?></strong> <?php _e('Always back up your wp-config.php before making changes.', 'chainsaw-plugin'); ?></p>
-    </div>
     <table class="widefat striped">
         <thead>
             <tr>
@@ -225,12 +173,21 @@ public function debug_info_field_callback() {
             </tr>
         </tbody>
     </table>
-    <p>These WordPress debug settings affect how errors and logs are handled.</p>
-    <p>Recommended production settings: WP_DEBUG=false, WP_DEBUG_DISPLAY=false, WP_DEBUG_LOG=false</p>
     
-    <!-- Explanatory text moved above table -->
+    <div class="">
+        <p><?php _e('These settings are defined in your wp-config.php file. To change them:', 'chainsaw-plugin'); ?></p>
+        <ol>
+            <li><?php _e('Edit wp-config.php (usually in your WordPress root directory)', 'chainsaw-plugin'); ?></li>
+            <li><?php _e('Look for the debug settings (search for "WP_DEBUG")', 'chainsaw-plugin'); ?></li>
+            <li><?php _e('Modify the values and save the file', 'chainsaw-plugin'); ?></li>
+            <li><?php _e('Refresh this page to see the updated values', 'chainsaw-plugin'); ?></li>
+        </ol>
+        <p><strong><?php _e('Important:', 'chainsaw-plugin'); ?></strong> <?php _e('Always back up your wp-config.php before making changes.', 'chainsaw-plugin'); ?></p>
+    </div>
     <?php
-}
+    }
+
+
     
     /**
      * Add admin menu item under Settings
@@ -255,11 +212,8 @@ public function debug_info_field_callback() {
     }
     ?>
     <div class="wrap">
-        <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
-        <?php settings_errors(); ?>
-
-        <?php $this->debug_info_field_callback(); ?>
-
+        <h1>Chainsaw Settings</h1>
+        <?php $this->debug_section() ?>
         <form action="options.php" method="post">
             <?php
             settings_fields('chainsaw_settings');
@@ -267,7 +221,7 @@ public function debug_info_field_callback() {
             submit_button('Save Settings');
             ?>
         </form>
-
+        
         <?php $this->debug_log_section_callback(); ?>
     </div>
     <?php
@@ -527,38 +481,39 @@ private function tail_file($filepath, $lines = 100) {
      */
     public function maybe_cleanup_debug_log() {
     
-    if (rand(1, 10) > 1) return;
+        if (rand(1, 10) > 1) return;
 
-    $debug_log = WP_CONTENT_DIR . '/debug.log';
-    $max_size = $this->get_current_max_size();
+        $debug_log = WP_CONTENT_DIR . '/debug.log';
+        $max_size = $this->get_current_max_size();
 
-    if (!file_exists($debug_log)) return;
+        if (!file_exists($debug_log)) return;
 
-    $filesize = filesize($debug_log);
-    if ($filesize <= $max_size) return;
+        $filesize = filesize($debug_log);
+        if ($filesize <= $max_size) return;
 
-    // Get last 100 lines
-    $tail = $this->get_last_log_lines($debug_log, 100);
+        // Get last 100 lines
+        $tail = $this->get_last_log_lines($debug_log, 100);
 
-    // Store cleanup info before deleting
-    $cleanup_info = array(
-        'time' => current_time('mysql'),
-        'size' => $filesize,
-        'last_lines' => $tail
-    );
-    update_option('chainsaw_last_cleanup', $cleanup_info);
+        // Store cleanup info before deleting
+        $cleanup_info = array(
+            'time' => current_time('mysql'),
+            'size' => $filesize,
+            'last_lines' => $tail
+        );
+        update_option('chainsaw_last_cleanup', $cleanup_info);
 
-    // Delete the file
-    unlink($debug_log);
+        // Delete the file
+        unlink($debug_log);
 
-    // Send email notification
-    $this->send_log_cleanup_notification($filesize, $tail);
-}
+        // Send email notification
+        $this->send_log_cleanup_notification($filesize, $tail);
+    }
 
 /**
  * Show admin notice when log was recently cleared
  */
 public function admin_notices() {
+    // Show debug.log cleanup notice
     $cleanup_info = get_option('chainsaw_last_cleanup');
     if ($cleanup_info && (time() - strtotime($cleanup_info['time']) <= 3600)) {
         $size = size_format($cleanup_info['size']);
@@ -583,13 +538,21 @@ public function admin_notices() {
         delete_option('chainsaw_last_cleanup');
     }
 
-    // Show WP_DEBUG_LOG toggle notice
-    if (isset($_COOKIE['chainsaw_notice']) && !empty($_COOKIE['chainsaw_notice'])) {
-        $type = (isset($_COOKIE['chainsaw_notice_type']) && $_COOKIE['chainsaw_notice_type'] === 'error') ? 'error' : 'success';
-        echo '<div id="setting-error-chainsaw_notice" class="notice notice-' . esc_attr($type) . ' settings-error is-dismissible"><p><strong>' . esc_html($_COOKIE['chainsaw_notice']) . '</strong></p></div>';
-        // Clear the cookie after displaying
+    // Show WP_DEBUG_LOG toggle notice if cookie is set
+    if (!empty($_COOKIE['chainsaw_notice'])) {
+        $notice = sanitize_text_field($_COOKIE['chainsaw_notice']);
+        $type = !empty($_COOKIE['chainsaw_notice_type']) ? sanitize_text_field($_COOKIE['chainsaw_notice_type']) : 'updated';
+        ?>
+        <div class="notice notice-<?php echo esc_attr($type); ?> is-dismissible">
+            <p><?php echo esc_html($notice); ?></p>
+        </div>
+        <?php
+        // Clear cookies after displaying
         setcookie('chainsaw_notice', '', time() - 3600, '/');
         setcookie('chainsaw_notice_type', '', time() - 3600, '/');
+        // Also unset from $_COOKIE for immediate effect
+        unset($_COOKIE['chainsaw_notice']);
+        unset($_COOKIE['chainsaw_notice_type']);
     }
 }
 
@@ -638,22 +601,29 @@ public function admin_notices() {
         }
     }
 
-    /**
-     * Handle WP_DEBUG_LOG toggle submission
-     */
-    public function handle_toggle_wp_debug_log() {
+     public function handle_toggle_wp_debug_log() {
+            echo "whyyyyy?";
+        // Error logging for debugging
         if (!current_user_can('manage_options')) {
+            error_log('Chainsaw: insufficient permissions');
             wp_die(__('Insufficient permissions.', 'chainsaw-plugin'));
         }
+        if (!isset($_POST['desired_state'])) {
+            error_log('Chainsaw: desired_state not set');
+            wp_die(__('Invalid request.', 'chainsaw-plugin'));
+        }
+    
+       
+        // Nonce check (returns void, dies on failure)
         check_admin_referer('chainsaw_toggle_wp_debug_log');
 
-        $desired = isset($_POST['desired_state']) && $_POST['desired_state'] === '1';
+        $desired = $_POST['desired_state'] === '1';
         $result = $this->update_wp_config_constant('WP_DEBUG_LOG', $desired ? 'true' : 'false');
-
         if ($result === true) {
             $notice = sprintf(__('WP_DEBUG_LOG set to %s. If you do not see the change below, please refresh the page.', 'chainsaw-plugin'), $desired ? 'true' : 'false');
-            $type = 'updated';
+            $type = 'success';
         } else {
+            error_log('Chainsaw: update_wp_config_constant failed: ' . print_r($result, true));
             $notice = sprintf(__('Failed to update WP_DEBUG_LOG: %s', 'chainsaw-plugin'), $result);
             $type = 'error';
         }
@@ -661,11 +631,17 @@ public function admin_notices() {
         setcookie('chainsaw_notice', $notice, 0, '/');
         setcookie('chainsaw_notice_type', $type, 0, '/');
         // Redirect to clean settings page
-        wp_redirect(add_query_arg(array('page' => 'chainsaw-settings'), admin_url('options-general.php')));
-        exit;
+        if (!headers_sent()) {
+            wp_redirect(add_query_arg(array('page' => 'chainsaw-settings'), admin_url('options-general.php')));
+            exit;
+        } else {
+            error_log('Chainsaw: headers already sent before redirect');
+            echo '<script>window.location = "' . esc_url(add_query_arg(array('page' => 'chainsaw-settings'), admin_url('options-general.php'))) . '";</script>';
+            exit;
+        }
     }
 
-    /**
+     /**
      * Update or insert a constant definition in wp-config.php
      * Returns true on success or error string on failure
      */
