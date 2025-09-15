@@ -602,6 +602,7 @@ public function admin_notices() {
     }
 
      public function handle_toggle_wp_debug_log() {
+            echo "whyyyyy?";
         // Error logging for debugging
         if (!current_user_can('manage_options')) {
             error_log('Chainsaw: insufficient permissions');
@@ -611,18 +612,16 @@ public function admin_notices() {
             error_log('Chainsaw: desired_state not set');
             wp_die(__('Invalid request.', 'chainsaw-plugin'));
         }
+    
        
         // Nonce check (returns void, dies on failure)
         check_admin_referer('chainsaw_toggle_wp_debug_log');
 
         $desired = $_POST['desired_state'] === '1';
-        echo "wtf 1 $desired";
         $result = $this->update_wp_config_constant('WP_DEBUG_LOG', $desired ? 'true' : 'false');
-             
-             echo "wtf 2";
         if ($result === true) {
             $notice = sprintf(__('WP_DEBUG_LOG set to %s. If you do not see the change below, please refresh the page.', 'chainsaw-plugin'), $desired ? 'true' : 'false');
-            $type = 'updated';
+            $type = 'success';
         } else {
             error_log('Chainsaw: update_wp_config_constant failed: ' . print_r($result, true));
             $notice = sprintf(__('Failed to update WP_DEBUG_LOG: %s', 'chainsaw-plugin'), $result);
