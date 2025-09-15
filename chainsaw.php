@@ -44,8 +44,8 @@ class Chainsaw {
 
          add_action('admin_notices', array($this, 'admin_notices'));
 
-    // Handle WP_DEBUG_LOG toggle submissions
-    add_action('admin_post_chainsaw_toggle_wp_debug_log', array($this, 'handle_toggle_wp_debug_log'));
+        // Handle WP_DEBUG_LOG toggle submissions
+        add_action('admin_post_chainsaw_toggle_wp_debug_log', array($this, 'handle_toggle_wp_debug_log'));
     }
     
     /**
@@ -97,14 +97,14 @@ class Chainsaw {
     //     'chainsaw-settings'
     // );
 
-    // Add API Key field
-    add_settings_field(
-        'chainsaw_api_key',
-        __('API Key', 'chainsaw-plugin'),
-        array($this, 'api_key_field_callback'),
-        'chainsaw-settings',
-        'chainsaw_api_section'
-    );
+    // // Add API Key field
+    // add_settings_field(
+    //     'chainsaw_api_key',
+    //     __('API Key', 'chainsaw-plugin'),
+    //     array($this, 'api_key_field_callback'),
+    //     'chainsaw-settings',
+    //     'chainsaw_api_section'
+    // );
 
     // Add Developer Settings section
     add_settings_section(
@@ -560,30 +560,37 @@ private function tail_file($filepath, $lines = 100) {
  */
 public function admin_notices() {
     $cleanup_info = get_option('chainsaw_last_cleanup');
-    if (!$cleanup_info || (time() - strtotime($cleanup_info['time']) > 3600)) {
-        return;
+    if ($cleanup_info && (time() - strtotime($cleanup_info['time']) <= 3600)) {
+        $size = size_format($cleanup_info['size']);
+        ?>
+        <div class="notice notice-warning is-dismissible">
+            <p>
+                <?php printf(
+                    __('Chainsaw: debug.log was automatically cleared at %1$s. The file had reached %2$s in size.', 'chainsaw-plugin'),
+                    date_i18n(get_option('date_format') . ' ' . get_option('time_format'), strtotime($cleanup_info['time'])),
+                    $size
+                ); ?>
+            </p>
+            <details style="margin-top:10px;">
+                <summary><?php _e('Show last 10 lines', 'chainsaw-plugin'); ?></summary>
+                <pre style="background:#f6f7f7;padding:10px;overflow:auto;"><?php 
+                    echo esc_html(implode("\n", array_slice(explode("\n", $cleanup_info['last_lines']), -10)));
+                ?></pre>
+            </details>
+        </div>
+        <?php
+        // Clear the transient after displaying
+        delete_option('chainsaw_last_cleanup');
     }
-    
-    $size = size_format($cleanup_info['size']);
-    ?>
-    <div class="notice notice-warning is-dismissible">
-        <p>
-            <?php printf(
-                __('Chainsaw: debug.log was automatically cleared at %1$s. The file had reached %2$s in size.', 'chainsaw-plugin'),
-                date_i18n(get_option('date_format') . ' ' . get_option('time_format'), strtotime($cleanup_info['time'])),
-                $size
-            ); ?>
-        </p>
-        <details style="margin-top:10px;">
-            <summary><?php _e('Show last 10 lines', 'chainsaw-plugin'); ?></summary>
-            <pre style="background:#f6f7f7;padding:10px;overflow:auto;"><?php 
-                echo esc_html(implode("\n", array_slice(explode("\n", $cleanup_info['last_lines']), -10)));
-            ?></pre>
-        </details>
-    </div>
-    <?php
-    // Clear the transient after displaying
-    delete_option('chainsaw_last_cleanup');
+
+    // Show WP_DEBUG_LOG toggle notice
+    if (isset($_COOKIE['chainsaw_notice']) && !empty($_COOKIE['chainsaw_notice'])) {
+        $type = (isset($_COOKIE['chainsaw_notice_type']) && $_COOKIE['chainsaw_notice_type'] === 'error') ? 'error' : 'success';
+        echo '<div id="setting-error-chainsaw_notice" class="notice notice-' . esc_attr($type) . ' settings-error is-dismissible"><p><strong>' . esc_html($_COOKIE['chainsaw_notice']) . '</strong></p></div>';
+        // Clear the cookie after displaying
+        setcookie('chainsaw_notice', '', time() - 3600, '/');
+        setcookie('chainsaw_notice_type', '', time() - 3600, '/');
+    }
 }
 
     /**
@@ -644,21 +651,16 @@ public function admin_notices() {
         $result = $this->update_wp_config_constant('WP_DEBUG_LOG', $desired ? 'true' : 'false');
 
         if ($result === true) {
-            add_settings_error(
-                'chainsaw_wp_debug_log',
-                'chainsaw_wp_debug_log_updated',
-                sprintf(__('WP_DEBUG_LOG set to %s.', 'chainsaw-plugin'), $desired ? 'true' : 'false'),
-                'updated'
-            );
+            $notice = sprintf(__('WP_DEBUG_LOG set to %s. If you do not see the change below, please refresh the page.', 'chainsaw-plugin'), $desired ? 'true' : 'false');
+            $type = 'updated';
         } else {
-            add_settings_error(
-                'chainsaw_wp_debug_log',
-                'chainsaw_wp_debug_log_failed',
-                sprintf(__('Failed to update WP_DEBUG_LOG: %s', 'chainsaw-plugin'), $result),
-                'error'
-            );
+            $notice = sprintf(__('Failed to update WP_DEBUG_LOG: %s', 'chainsaw-plugin'), $result);
+            $type = 'error';
         }
-
+        // Set session cookie for notice
+        setcookie('chainsaw_notice', $notice, 0, '/');
+        setcookie('chainsaw_notice_type', $type, 0, '/');
+        // Redirect to clean settings page
         wp_redirect(add_query_arg(array('page' => 'chainsaw-settings'), admin_url('options-general.php')));
         exit;
     }
