@@ -3,7 +3,7 @@
  * Plugin Name: Chainsaw
  * Plugin URI: https://kindleman.com.au/chainsaw
  * Description: Wordpress Logging and debug.
- * Version: 1.0.0
+ * Version: 1.0.1
  * Author: Kindleman 
  * Author URI: https://kindleman.com.au
  * License: GPL-2.0+
@@ -17,7 +17,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define constants with uppercase names
-define('CHAINSAW_VERSION', '1.0.0');
+define('CHAINSAW_VERSION', '1.0.2');
 define('CHAINSAW_DIR', plugin_dir_path(__FILE__));
 define('CHAINSAW_URL', plugin_dir_url(__FILE__));
 
