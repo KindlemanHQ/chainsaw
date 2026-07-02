@@ -41,7 +41,7 @@ class Chainsaw {
         add_action('init', array($this, 'maybe_cleanup_debug_log'), 9999);
 
          add_action('admin_notices', array($this, 'admin_notices'));
-        add_action('admin_post_chainsaw_toggle_wp_debug_log', array($this, 'handle_toggle_wp_debug_log'));
+        add_action('admin_post_chainsaw_toggle_constant', array($this, 'handle_toggle_constant'));
 
         // Plugin activity tracking hooks
         add_action('activated_plugin', array($this, 'log_plugin_activated'), 10, 2);
@@ -222,71 +222,76 @@ class Chainsaw {
 
 
 
+    private function get_wp_config_path() {
+        $config_path = ABSPATH . 'wp-config.php';
+        if (!file_exists($config_path)) {
+            $config_path = dirname(ABSPATH) . '/wp-config.php';
+        }
+        return file_exists($config_path) ? $config_path : false;
+    }
+
+    private function is_wp_config_writable() {
+        $path = $this->get_wp_config_path();
+        return $path && is_writable($path);
+    }
+
     public function debug_section() {
-      echo '<p>' . __('These WordPress debug settings affect how errors and logs are handled.', 'chainsaw-plugin') . '</p>';
-      echo '<p>' . __('Recommended production settings: WP_DEBUG=false, WP_DEBUG_DISPLAY=false, WP_DEBUG_LOG=false', 'chainsaw-plugin') . '</p>';
-      $debug_settings = array(
-        'WP_DEBUG' => defined('WP_DEBUG') ? WP_DEBUG : false,
-        'WP_DEBUG_DISPLAY' => defined('WP_DEBUG_DISPLAY') ? WP_DEBUG_DISPLAY : false,
-        'WP_DEBUG_LOG' => defined('WP_DEBUG_LOG') ? WP_DEBUG_LOG : false,
-        'CORE_UPGRADE_SKIP_NEW_BUNDLED' => defined('CORE_UPGRADE_SKIP_NEW_BUNDLED') ? CORE_UPGRADE_SKIP_NEW_BUNDLED : false,
-    );
+      $config_writable = $this->is_wp_config_writable();
+
+      $settings = array(
+          'WP_DEBUG' => array(
+              'value'       => defined('WP_DEBUG') ? WP_DEBUG : false,
+              'recommended' => __('false on production unless you need output to debug.log', 'chainsaw-plugin'),
+          ),
+          'WP_DEBUG_DISPLAY' => array(
+              'value'       => defined('WP_DEBUG_DISPLAY') ? WP_DEBUG_DISPLAY : false,
+              'recommended' => __('false on production', 'chainsaw-plugin'),
+          ),
+          'WP_DEBUG_LOG' => array(
+              'value'       => defined('WP_DEBUG_LOG') ? WP_DEBUG_LOG : false,
+              'recommended' => __('false on production (or true for logging)', 'chainsaw-plugin'),
+          ),
+          'CORE_UPGRADE_SKIP_NEW_BUNDLED' => array(
+              'value'       => defined('CORE_UPGRADE_SKIP_NEW_BUNDLED') ? CORE_UPGRADE_SKIP_NEW_BUNDLED : false,
+              'recommended' => __('true to skip adding yearly wp themes during update', 'chainsaw-plugin'),
+          ),
+      );
     ?>
+    <?php if (!$config_writable) : ?>
+        <div class="notice notice-warning inline"><p><?php _e('wp-config.php is not writable. Toggle buttons are disabled.', 'chainsaw-plugin'); ?></p></div>
+    <?php endif; ?>
     <table class="widefat striped">
         <thead>
             <tr>
                 <th><?php _e('Setting', 'chainsaw-plugin'); ?></th>
                 <th><?php _e('Current Value', 'chainsaw-plugin'); ?></th>
                 <th><?php _e('Recommended', 'chainsaw-plugin'); ?></th>
-                <th>Actions</th>
+                <th><?php _e('Actions', 'chainsaw-plugin'); ?></th>
             </tr>
         </thead>
         <tbody>
+            <?php foreach ($settings as $constant => $info) :
+                $is_on = (bool) $info['value'];
+            ?>
             <tr>
-                <td><code>WP_DEBUG</code></td>
-                <td><strong><?php echo $debug_settings['WP_DEBUG'] ? __('true', 'chainsaw-plugin') : __('false', 'chainsaw-plugin'); ?></strong></td>
-                <td><?php _e('false on production unless you need output to debug.log', 'chainsaw-plugin'); ?></td>
-                <td></td>
-            </tr>
-            <tr>
-                <td><code>WP_DEBUG_DISPLAY</code></td>
-                <td><strong><?php echo $debug_settings['WP_DEBUG_DISPLAY'] ? __('true', 'chainsaw-plugin') : __('false', 'chainsaw-plugin'); ?></strong></td>
-                <td><?php _e('false on production', 'chainsaw-plugin'); ?></td>
-                <td></td>
-            </tr>
-            <tr>
-                <td><code>WP_DEBUG_LOG</code></td>
-                <td><strong><?php echo $debug_settings['WP_DEBUG_LOG'] ? __('true', 'chainsaw-plugin') : __('false', 'chainsaw-plugin'); ?></strong></td>
-                <td><?php _e('false on production (or true for logging)', 'chainsaw-plugin'); ?></td>
+                <td><code><?php echo esc_html($constant); ?></code></td>
+                <td><strong><?php echo $is_on ? 'true' : 'false'; ?></strong></td>
+                <td><?php echo $info['recommended']; ?></td>
                 <td>
-                    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-                        <?php wp_nonce_field('chainsaw_toggle_wp_debug_log'); ?>
-                        <input type="hidden" name="action" value="chainsaw_toggle_wp_debug_log" />
-                        <input type="hidden" name="desired_state" value="<?php echo $debug_settings['WP_DEBUG_LOG'] ? '0' : '1'; ?>" />
-                        <button type="submit" class="button button-<?php echo $debug_settings['WP_DEBUG_LOG'] ? 'secondary' : 'primary'; ?>">
-                            <?php echo $debug_settings['WP_DEBUG_LOG'] ? __('Disable Logging', 'chainsaw-plugin') : __('Enable Logging', 'chainsaw-plugin'); ?>
+                    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                        <?php wp_nonce_field('chainsaw_toggle_constant'); ?>
+                        <input type="hidden" name="action" value="chainsaw_toggle_constant" />
+                        <input type="hidden" name="constant" value="<?php echo esc_attr($constant); ?>" />
+                        <input type="hidden" name="desired_state" value="<?php echo $is_on ? '0' : '1'; ?>" />
+                        <button type="submit" class="button button-<?php echo $is_on ? 'secondary' : 'primary'; ?> button-small" <?php disabled(!$config_writable); ?>>
+                            <?php echo $is_on ? __('Disable', 'chainsaw-plugin') : __('Enable', 'chainsaw-plugin'); ?>
                         </button>
                     </form>
                 </td>
             </tr>
-            <tr>
-                <td><code>CORE_UPGRADE_SKIP_NEW_BUNDLED</code></td>
-                <td><strong><?php echo $debug_settings['CORE_UPGRADE_SKIP_NEW_BUNDLED'] ? __('true', 'chainsaw-plugin') : __('false', 'chainsaw-plugin'); ?></strong></td>
-                <td><?php _e('true to skip adding yearly wp themes during update', 'chainsaw-plugin'); ?></td>
-            </tr>
+            <?php endforeach; ?>
         </tbody>
     </table>
-    
-    <div class="">
-        <p><?php _e('These settings are defined in your wp-config.php file. To change them:', 'chainsaw-plugin'); ?></p>
-        <ol>
-            <li><?php _e('Edit wp-config.php (usually in your WordPress root directory)', 'chainsaw-plugin'); ?></li>
-            <li><?php _e('Look for the debug settings (search for "WP_DEBUG")', 'chainsaw-plugin'); ?></li>
-            <li><?php _e('Modify the values and save the file', 'chainsaw-plugin'); ?></li>
-            <li><?php _e('Refresh this page to see the updated values', 'chainsaw-plugin'); ?></li>
-        </ol>
-        <p><strong><?php _e('Important:', 'chainsaw-plugin'); ?></strong> <?php _e('Always back up your wp-config.php before making changes.', 'chainsaw-plugin'); ?></p>
-    </div>
     <?php
     }
 
@@ -798,44 +803,45 @@ public function admin_notices() {
         }
     }
 
-     public function handle_toggle_wp_debug_log() {
-            echo "whyyyyy?";
-        // Error logging for debugging
+    private static $toggleable_constants = array(
+        'WP_DEBUG',
+        'WP_DEBUG_DISPLAY',
+        'WP_DEBUG_LOG',
+        'CORE_UPGRADE_SKIP_NEW_BUNDLED',
+    );
+
+    public function handle_toggle_constant() {
         if (!current_user_can('manage_options')) {
-            error_log('Chainsaw: insufficient permissions');
             wp_die(__('Insufficient permissions.', 'chainsaw-plugin'));
         }
+
+        check_admin_referer('chainsaw_toggle_constant');
+
+        $constant = isset($_POST['constant']) ? sanitize_text_field($_POST['constant']) : '';
+        if (!in_array($constant, self::$toggleable_constants, true)) {
+            wp_die(__('Invalid constant.', 'chainsaw-plugin'));
+        }
+
         if (!isset($_POST['desired_state'])) {
-            error_log('Chainsaw: desired_state not set');
             wp_die(__('Invalid request.', 'chainsaw-plugin'));
         }
-    
-       
-        // Nonce check (returns void, dies on failure)
-        check_admin_referer('chainsaw_toggle_wp_debug_log');
 
         $desired = $_POST['desired_state'] === '1';
-        $result = $this->update_wp_config_constant('WP_DEBUG_LOG', $desired ? 'true' : 'false');
+        $result = $this->update_wp_config_constant($constant, $desired ? 'true' : 'false');
+
         if ($result === true) {
-            $notice = sprintf(__('WP_DEBUG_LOG set to %s. If you do not see the change below, please refresh the page.', 'chainsaw-plugin'), $desired ? 'true' : 'false');
+            $notice = sprintf(__('%s set to %s.', 'chainsaw-plugin'), $constant, $desired ? 'true' : 'false');
             $type = 'success';
         } else {
-            error_log('Chainsaw: update_wp_config_constant failed: ' . print_r($result, true));
-            $notice = sprintf(__('Failed to update WP_DEBUG_LOG: %s', 'chainsaw-plugin'), $result);
+            $notice = sprintf(__('Failed to update %1$s: %2$s', 'chainsaw-plugin'), $constant, $result);
             $type = 'error';
         }
-        // Set session cookie for notice
+
         setcookie('chainsaw_notice', $notice, 0, '/');
         setcookie('chainsaw_notice_type', $type, 0, '/');
-        // Redirect to clean settings page
-        if (!headers_sent()) {
-            wp_redirect(add_query_arg(array('page' => 'chainsaw-settings'), admin_url('options-general.php')));
-            exit;
-        } else {
-            error_log('Chainsaw: headers already sent before redirect');
-            echo '<script>window.location = "' . esc_url(add_query_arg(array('page' => 'chainsaw-settings'), admin_url('options-general.php'))) . '";</script>';
-            exit;
-        }
+
+        wp_redirect(add_query_arg(array('page' => 'chainsaw-settings'), admin_url('options-general.php')));
+        exit;
     }
 
      /**
