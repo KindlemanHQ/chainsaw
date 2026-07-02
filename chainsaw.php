@@ -28,20 +28,123 @@ class Chainsaw {
     public function init() {
         // Register settings
         add_action('admin_init', array($this, 'register_settings'));
-        
+
         // Add menu item
         add_action('admin_menu', array($this, 'add_admin_menu'));
-        
+
         // Load admin assets
         add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_assets'));
-        
+
         // Include settings fields
-        // require_once CHAINSAW_DIR . 'includes/settings-fields.php';        
+        // require_once CHAINSAW_DIR . 'includes/settings-fields.php';
 
         add_action('init', array($this, 'maybe_cleanup_debug_log'), 9999);
 
          add_action('admin_notices', array($this, 'admin_notices'));
         add_action('admin_post_chainsaw_toggle_wp_debug_log', array($this, 'handle_toggle_wp_debug_log'));
+
+        // Plugin activity tracking hooks
+        add_action('activated_plugin', array($this, 'log_plugin_activated'), 10, 2);
+        add_action('deactivated_plugin', array($this, 'log_plugin_deactivated'), 10, 2);
+        add_action('deleted_plugin', array($this, 'log_plugin_deleted'), 10, 2);
+        add_action('upgrader_process_complete', array($this, 'log_plugin_installed'), 10, 2);
+
+        // Ensure activity table exists on upgrade
+        if (get_option('chainsaw_db_version') !== CHAINSAW_VERSION) {
+            self::create_activity_table();
+            update_option('chainsaw_db_version', CHAINSAW_VERSION);
+        }
+    }
+
+    /**
+     * Create the plugin activity log table
+     */
+    public static function create_activity_table() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'chainsaw_plugin_log';
+        $charset_collate = $wpdb->get_charset_collate();
+
+        $sql = "CREATE TABLE $table (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            action varchar(20) NOT NULL,
+            plugin_slug varchar(255) NOT NULL,
+            plugin_name varchar(255) NOT NULL DEFAULT '',
+            user_id bigint(20) unsigned NOT NULL DEFAULT 0,
+            created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY action (action),
+            KEY created_at (created_at)
+        ) $charset_collate;";
+
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+        dbDelta($sql);
+    }
+
+    private function log_plugin_event($action, $plugin_file) {
+        global $wpdb;
+
+        $plugin_data = array();
+        $plugin_path = WP_PLUGIN_DIR . '/' . $plugin_file;
+        if (file_exists($plugin_path)) {
+            $plugin_data = get_plugin_data($plugin_path, false, false);
+        }
+
+        $wpdb->insert(
+            $wpdb->prefix . 'chainsaw_plugin_log',
+            array(
+                'action'      => $action,
+                'plugin_slug' => sanitize_text_field($plugin_file),
+                'plugin_name' => isset($plugin_data['Name']) ? sanitize_text_field($plugin_data['Name']) : basename(dirname($plugin_file)),
+                'user_id'     => get_current_user_id(),
+                'created_at'  => current_time('mysql'),
+            ),
+            array('%s', '%s', '%s', '%d', '%s')
+        );
+    }
+
+    public function log_plugin_activated($plugin, $network_wide) {
+        $this->log_plugin_event('activated', $plugin);
+    }
+
+    public function log_plugin_deactivated($plugin, $network_wide) {
+        $this->log_plugin_event('deactivated', $plugin);
+    }
+
+    public function log_plugin_deleted($plugin, $deleted) {
+        if ($deleted) {
+            $this->log_plugin_event('deleted', $plugin);
+        }
+    }
+
+    public function log_plugin_installed($upgrader, $options) {
+        if (!isset($options['type']) || !isset($options['action'])) {
+            return;
+        }
+
+        if ($options['type'] === 'core' && $options['action'] === 'update') {
+            global $wp_version;
+            $this->log_plugin_event('core_updated', 'wordpress-core');
+            return;
+        }
+
+        if ($options['type'] !== 'plugin') {
+            return;
+        }
+
+        if ($options['action'] === 'install') {
+            $plugin_slug = isset($upgrader->result['destination_name']) ? $upgrader->result['destination_name'] : '';
+            if ($plugin_slug) {
+                $this->log_plugin_event('installed', $plugin_slug);
+            }
+        } elseif ($options['action'] === 'update') {
+            if (isset($options['plugins']) && is_array($options['plugins'])) {
+                foreach ($options['plugins'] as $plugin_file) {
+                    $this->log_plugin_event('updated', $plugin_file);
+                }
+            } elseif (isset($options['plugin'])) {
+                $this->log_plugin_event('updated', $options['plugin']);
+            }
+        }
     }
     
     /**
@@ -210,22 +313,116 @@ class Chainsaw {
     if (!current_user_can('manage_options')) {
         return;
     }
+
+    $active_tab = isset($_GET['tab']) ? sanitize_key($_GET['tab']) : 'settings';
     ?>
     <div class="wrap">
-        <h1>Chainsaw Settings</h1>
-        <?php $this->debug_section() ?>
-        <form action="options.php" method="post">
-            <?php
-            settings_fields('chainsaw_settings');
-            do_settings_sections('chainsaw-settings');
-            submit_button('Save Settings');
-            ?>
-        </form>
-        
-        <?php $this->debug_log_section_callback(); ?>
+        <h1>Chainsaw</h1>
+        <nav class="nav-tab-wrapper">
+            <a href="<?php echo esc_url(add_query_arg('tab', 'settings', remove_query_arg('paged'))); ?>" class="nav-tab <?php echo $active_tab === 'settings' ? 'nav-tab-active' : ''; ?>">Settings</a>
+            <a href="<?php echo esc_url(add_query_arg('tab', 'activity', remove_query_arg('paged'))); ?>" class="nav-tab <?php echo $active_tab === 'activity' ? 'nav-tab-active' : ''; ?>">Plugin Activity</a>
+        </nav>
+
+        <?php if ($active_tab === 'settings') : ?>
+            <?php $this->debug_section() ?>
+            <form action="options.php" method="post">
+                <?php
+                settings_fields('chainsaw_settings');
+                do_settings_sections('chainsaw-settings');
+                submit_button('Save Settings');
+                ?>
+            </form>
+            <?php $this->debug_log_section_callback(); ?>
+        <?php else : ?>
+            <?php $this->render_activity_log(); ?>
+        <?php endif; ?>
     </div>
     <?php
 }
+
+    private function render_activity_log() {
+        global $wpdb;
+        $table = $wpdb->prefix . 'chainsaw_plugin_log';
+
+        // Check if the table exists yet
+        if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table)) !== $table) {
+            echo '<div class="notice notice-warning"><p>';
+            _e('Activity log table has not been created yet. Deactivate and reactivate Chainsaw to create it.', 'chainsaw-plugin');
+            echo '</p></div>';
+            return;
+        }
+
+        $per_page = 30;
+        $current_page = isset($_GET['paged']) ? max(1, absint($_GET['paged'])) : 1;
+        $offset = ($current_page - 1) * $per_page;
+
+        $total = (int) $wpdb->get_var("SELECT COUNT(*) FROM $table");
+        $rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM $table ORDER BY created_at DESC LIMIT %d OFFSET %d",
+            $per_page,
+            $offset
+        ));
+
+        $action_labels = array(
+            'activated'   => '🟢 Activated',
+            'deactivated' => '🔴 Deactivated',
+            'installed'   => '📥 Installed',
+            'deleted'      => '🗑️ Deleted',
+            'updated'      => '🔄 Updated',
+            'core_updated' => '⬆️ Core Updated',
+        );
+
+        ?>
+        <h2><?php _e('Plugin Activity Log', 'chainsaw-plugin'); ?></h2>
+
+        <?php if (empty($rows)) : ?>
+            <p><?php _e('No plugin activity recorded yet.', 'chainsaw-plugin'); ?></p>
+        <?php else : ?>
+            <table class="widefat striped">
+                <thead>
+                    <tr>
+                        <th><?php _e('Date', 'chainsaw-plugin'); ?></th>
+                        <th><?php _e('Action', 'chainsaw-plugin'); ?></th>
+                        <th><?php _e('Plugin', 'chainsaw-plugin'); ?></th>
+                        <th><?php _e('User', 'chainsaw-plugin'); ?></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($rows as $row) :
+                        $user = get_userdata($row->user_id);
+                        $display_name = $user ? esc_html($user->display_name) : __('Unknown', 'chainsaw-plugin');
+                        $label = isset($action_labels[$row->action]) ? $action_labels[$row->action] : esc_html($row->action);
+                    ?>
+                        <tr>
+                            <td><?php echo esc_html(date_i18n(get_option('date_format') . ' ' . get_option('time_format'), strtotime($row->created_at))); ?></td>
+                            <td><?php echo $label; ?></td>
+                            <td>
+                                <strong><?php echo esc_html($row->plugin_name); ?></strong>
+                                <br><small><?php echo esc_html($row->plugin_slug); ?></small>
+                            </td>
+                            <td><?php echo $display_name; ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+
+            <?php
+            $total_pages = ceil($total / $per_page);
+            if ($total_pages > 1) {
+                $page_links = paginate_links(array(
+                    'base'    => add_query_arg('paged', '%#%'),
+                    'format'  => '',
+                    'current' => $current_page,
+                    'total'   => $total_pages,
+                ));
+                if ($page_links) {
+                    echo '<div class="tablenav"><div class="tablenav-pages">' . $page_links . '</div></div>';
+                }
+            }
+            ?>
+        <?php endif; ?>
+        <?php
+    }
     
     /**
      * Enqueue admin assets
@@ -701,6 +898,9 @@ public function admin_notices() {
     }
 
 }
+
+// Activation hook — create DB table
+register_activation_hook(__FILE__, array('Chainsaw', 'create_activity_table'));
 
 // Initialize the plugin
 if (class_exists('Chainsaw')) {
