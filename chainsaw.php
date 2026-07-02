@@ -320,7 +320,7 @@ class Chainsaw {
         <h1>Chainsaw</h1>
         <nav class="nav-tab-wrapper">
             <a href="<?php echo esc_url(add_query_arg('tab', 'settings', remove_query_arg('paged'))); ?>" class="nav-tab <?php echo $active_tab === 'settings' ? 'nav-tab-active' : ''; ?>">Settings</a>
-            <a href="<?php echo esc_url(add_query_arg('tab', 'activity', remove_query_arg('paged'))); ?>" class="nav-tab <?php echo $active_tab === 'activity' ? 'nav-tab-active' : ''; ?>">Plugin Activity</a>
+            <a href="<?php echo esc_url(add_query_arg('tab', 'activity', remove_query_arg('paged'))); ?>" class="nav-tab <?php echo $active_tab === 'activity' ? 'nav-tab-active' : ''; ?>">Activity</a>
         </nav>
 
         <?php if ($active_tab === 'settings') : ?>
