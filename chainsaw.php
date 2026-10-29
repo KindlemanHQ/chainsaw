@@ -309,6 +309,15 @@ class Chainsaw {
             'chainsaw-settings',
             array($this, 'render_settings_page')
         );
+
+        add_submenu_page(
+            'tools.php',
+            __('Chainsaw', 'chainsaw-plugin'),
+            __('Chainsaw', 'chainsaw-plugin'),
+            'manage_options',
+            'chainsaw-activity',
+            array($this, 'render_tools_page')
+        );
     }
     
     /**
@@ -318,38 +327,49 @@ class Chainsaw {
     if (!current_user_can('manage_options')) {
         return;
     }
-
-    $active_tab = isset($_GET['tab']) ? sanitize_key($_GET['tab']) : 'settings';
     ?>
     <div class="wrap">
         <h1>Chainsaw</h1>
-        <nav class="nav-tab-wrapper">
-            <a href="<?php echo esc_url(add_query_arg('tab', 'settings', remove_query_arg('paged'))); ?>" class="nav-tab <?php echo $active_tab === 'settings' ? 'nav-tab-active' : ''; ?>">Settings</a>
-            <a href="<?php echo esc_url(add_query_arg('tab', 'activity', remove_query_arg('paged'))); ?>" class="nav-tab <?php echo $active_tab === 'activity' ? 'nav-tab-active' : ''; ?>">Activity</a>
-        </nav>
-
-        <?php if ($active_tab === 'settings') : ?>
-            <?php $this->debug_section() ?>
-            <form action="options.php" method="post">
-                <?php
-                settings_fields('chainsaw_settings');
-                do_settings_sections('chainsaw-settings');
-                submit_button('Save Settings');
-                ?>
-            </form>
-            <?php $this->debug_log_section_callback(); ?>
-        <?php else : ?>
-            <?php $this->render_activity_log(); ?>
-        <?php endif; ?>
+        <?php $this->debug_section() ?>
+        <form action="options.php" method="post">
+            <?php
+            settings_fields('chainsaw_settings');
+            do_settings_sections('chainsaw-settings');
+            submit_button('Save Settings');
+            ?>
+        </form>
     </div>
     <?php
 }
+
+    public function render_tools_page() {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+
+        $active_tab = isset($_GET['tab']) ? sanitize_key($_GET['tab']) : 'activity';
+        $base_url = admin_url('tools.php?page=chainsaw-activity');
+        ?>
+        <div class="wrap">
+            <h1><?php _e('Chainsaw', 'chainsaw-plugin'); ?></h1>
+            <nav class="nav-tab-wrapper">
+                <a href="<?php echo esc_url(add_query_arg('tab', 'activity', $base_url)); ?>" class="nav-tab <?php echo $active_tab === 'activity' ? 'nav-tab-active' : ''; ?>"><?php _e('Activity', 'chainsaw-plugin'); ?></a>
+                <a href="<?php echo esc_url(add_query_arg('tab', 'debug-log', $base_url)); ?>" class="nav-tab <?php echo $active_tab === 'debug-log' ? 'nav-tab-active' : ''; ?>"><?php _e('Debug Log', 'chainsaw-plugin'); ?></a>
+            </nav>
+
+            <?php if ($active_tab === 'debug-log') : ?>
+                <?php $this->debug_log_section_callback(); ?>
+            <?php else : ?>
+                <?php $this->render_activity_log(); ?>
+            <?php endif; ?>
+        </div>
+        <?php
+    }
 
     private function render_activity_log() {
         global $wpdb;
         $table = $wpdb->prefix . 'chainsaw_plugin_log';
 
-        // Check if the table exists yet
         if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table)) !== $table) {
             echo '<div class="notice notice-warning"><p>';
             _e('Activity log table has not been created yet. Deactivate and reactivate Chainsaw to create it.', 'chainsaw-plugin');
@@ -357,31 +377,87 @@ class Chainsaw {
             return;
         }
 
-        $per_page = 30;
-        $current_page = isset($_GET['paged']) ? max(1, absint($_GET['paged'])) : 1;
-        $offset = ($current_page - 1) * $per_page;
-
-        $total = (int) $wpdb->get_var("SELECT COUNT(*) FROM $table");
-        $rows = $wpdb->get_results($wpdb->prepare(
-            "SELECT * FROM $table ORDER BY created_at DESC LIMIT %d OFFSET %d",
-            $per_page,
-            $offset
-        ));
-
         $action_labels = array(
-            'activated'   => '🟢 Activated',
-            'deactivated' => '🔴 Deactivated',
-            'installed'   => '📥 Installed',
+            'activated'    => '🟢 Activated',
+            'deactivated'  => '🔴 Deactivated',
+            'installed'    => '📥 Installed',
             'deleted'      => '🗑️ Deleted',
             'updated'      => '🔄 Updated',
             'core_updated' => '⬆️ Core Updated',
         );
 
+        // Read filters
+        $filter_plugin = isset($_GET['filter_plugin']) ? sanitize_text_field($_GET['filter_plugin']) : '';
+        $filter_action = isset($_GET['filter_action']) ? sanitize_text_field($_GET['filter_action']) : '';
+
+        // Build WHERE clauses
+        $where = array();
+        $where_values = array();
+        if ($filter_plugin !== '') {
+            $where[] = 'plugin_name = %s';
+            $where_values[] = $filter_plugin;
+        }
+        if ($filter_action !== '') {
+            $where[] = 'action = %s';
+            $where_values[] = $filter_action;
+        }
+        $where_sql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+
+        // Get distinct values for dropdowns
+        $plugin_names = $wpdb->get_col("SELECT DISTINCT plugin_name FROM $table ORDER BY plugin_name ASC");
+        $action_types = $wpdb->get_col("SELECT DISTINCT action FROM $table ORDER BY action ASC");
+
+        // Count and fetch filtered rows
+        $per_page = 30;
+        $current_page = isset($_GET['paged']) ? max(1, absint($_GET['paged'])) : 1;
+        $offset = ($current_page - 1) * $per_page;
+
+        if ($where_values) {
+            $total = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $table $where_sql", $where_values));
+            $rows = $wpdb->get_results($wpdb->prepare(
+                "SELECT * FROM $table $where_sql ORDER BY created_at DESC LIMIT %d OFFSET %d",
+                array_merge($where_values, array($per_page, $offset))
+            ));
+        } else {
+            $total = (int) $wpdb->get_var("SELECT COUNT(*) FROM $table");
+            $rows = $wpdb->get_results($wpdb->prepare(
+                "SELECT * FROM $table ORDER BY created_at DESC LIMIT %d OFFSET %d",
+                $per_page,
+                $offset
+            ));
+        }
+
+        $base_url = admin_url('tools.php');
         ?>
-        <h2><?php _e('Plugin Activity Log', 'chainsaw-plugin'); ?></h2>
+
+        <div class="tablenav top">
+            <form method="get" action="<?php echo esc_url($base_url); ?>">
+                <input type="hidden" name="page" value="chainsaw-activity" />
+                <div class="alignleft actions">
+                    <select name="filter_plugin">
+                        <option value=""><?php _e('All Plugins', 'chainsaw-plugin'); ?></option>
+                        <?php foreach ($plugin_names as $name) : ?>
+                            <option value="<?php echo esc_attr($name); ?>" <?php selected($filter_plugin, $name); ?>><?php echo esc_html($name); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <select name="filter_action">
+                        <option value=""><?php _e('All Actions', 'chainsaw-plugin'); ?></option>
+                        <?php foreach ($action_types as $action) : ?>
+                            <option value="<?php echo esc_attr($action); ?>" <?php selected($filter_action, $action); ?>>
+                                <?php echo isset($action_labels[$action]) ? esc_html(wp_strip_all_tags($action_labels[$action])) : esc_html(ucfirst($action)); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <?php submit_button(__('Filter', 'chainsaw-plugin'), '', '', false); ?>
+                    <?php if ($filter_plugin !== '' || $filter_action !== '') : ?>
+                        <a href="<?php echo esc_url(add_query_arg(array('page' => 'chainsaw-activity'), $base_url)); ?>" class="button"><?php _e('Clear', 'chainsaw-plugin'); ?></a>
+                    <?php endif; ?>
+                </div>
+            </form>
+        </div>
 
         <?php if (empty($rows)) : ?>
-            <p><?php _e('No plugin activity recorded yet.', 'chainsaw-plugin'); ?></p>
+            <p><?php _e('No activity found matching the selected filters.', 'chainsaw-plugin'); ?></p>
         <?php else : ?>
             <table class="widefat striped">
                 <thead>
@@ -412,16 +488,20 @@ class Chainsaw {
             </table>
 
             <?php
+            $pagination_args = array('paged' => '%#%', 'page' => 'chainsaw-activity');
+            if ($filter_plugin !== '') $pagination_args['filter_plugin'] = $filter_plugin;
+            if ($filter_action !== '') $pagination_args['filter_action'] = $filter_action;
+
             $total_pages = ceil($total / $per_page);
             if ($total_pages > 1) {
                 $page_links = paginate_links(array(
-                    'base'    => add_query_arg('paged', '%#%'),
+                    'base'    => add_query_arg($pagination_args, $base_url),
                     'format'  => '',
                     'current' => $current_page,
                     'total'   => $total_pages,
                 ));
                 if ($page_links) {
-                    echo '<div class="tablenav"><div class="tablenav-pages">' . $page_links . '</div></div>';
+                    echo '<div class="tablenav bottom"><div class="tablenav-pages">' . $page_links . '</div></div>';
                 }
             }
             ?>
@@ -433,7 +513,7 @@ class Chainsaw {
      * Enqueue admin assets
      */
     public function enqueue_admin_assets($hook) {
-        if ($hook !== 'settings_page_chainsaw-settings') {
+        if ($hook !== 'settings_page_chainsaw-settings' && $hook !== 'tools_page_chainsaw-activity') {
             return;
         }
         
